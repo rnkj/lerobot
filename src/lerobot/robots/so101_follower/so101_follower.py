@@ -20,6 +20,7 @@ from functools import cached_property
 from typing import Any
 
 from lerobot.cameras.utils import make_cameras_from_configs
+from lerobot.cameras.wrappers import WrapperCameraConfig, WrapperCamera
 from lerobot.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 from lerobot.motors import Motor, MotorCalibration, MotorNormMode
 from lerobot.motors.feetech import (
@@ -66,9 +67,14 @@ class SO101Follower(Robot):
 
     @property
     def _cameras_ft(self) -> dict[str, tuple]:
-        return {
-            cam: (self.config.cameras[cam].height, self.config.cameras[cam].width, 3) for cam in self.cameras
-        }
+        features = {}
+        for cam in self.cameras:
+            config = self.config.cameras[cam]
+            features[cam] = (config.height, config.width, 3)
+            if isinstance(config, WrapperCameraConfig):
+                ft = {f"{cam}_{key}": value for key, value in config.features.items()}
+                features.update(ft)
+        return features
 
     @cached_property
     def observation_features(self) -> dict[str, type | tuple]:
@@ -169,7 +175,7 @@ class SO101Follower(Robot):
 
         # Read arm position
         start = time.perf_counter()
-        obs_dict = self.bus.sync_read("Present_Position")
+        obs_dict = self.bus.sync_read("Present_Position", num_retry=3)
         obs_dict = {f"{motor}.pos": val for motor, val in obs_dict.items()}
         dt_ms = (time.perf_counter() - start) * 1e3
         logger.debug(f"{self} read state: {dt_ms:.1f}ms")
@@ -180,6 +186,13 @@ class SO101Follower(Robot):
             obs_dict[cam_key] = cam.async_read()
             dt_ms = (time.perf_counter() - start) * 1e3
             logger.debug(f"{self} read {cam_key}: {dt_ms:.1f}ms")
+
+            if isinstance(cam, WrapperCamera):
+                additional_obs = {
+                    f"{cam_key}_{ft_key}": ft
+                    for ft_key, ft in cam.get_features().items()
+                }
+                obs_dict.update(additional_obs)
 
         return obs_dict
 
