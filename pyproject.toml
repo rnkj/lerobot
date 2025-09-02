@@ -116,6 +116,7 @@ intelrealsense = [
 #     "pyrender @ git+https://github.com/mmatl/pyrender.git ; sys_platform == 'linux'",
 #     "pyrealsense2>=2.55.1.6486 ; sys_platform != 'darwin'"
 # ] # TODO: Currently not supported
+mediapipe = ["mediapipe>=0.10.21"]
 
 # Policies
 pi0 = ["lerobot[transformers-dep]"]
