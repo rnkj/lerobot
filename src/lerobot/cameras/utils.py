@@ -49,6 +49,14 @@ def make_cameras_from_configs(camera_configs: dict[str, CameraConfig]) -> dict[s
             except Exception as e:
                 raise ValueError(f"Error creating camera {key} with config {cfg}: {e}") from e
 
+        elif cfg.type == "mediapipe_hand":
+            from .wrappers.mediapipe.camera_mediapipe import MediapipeHandLandmarkerCamera
+
+            cameras[key] = MediapipeHandLandmarkerCamera(cfg)
+
+        else:
+            raise ValueError(f"The camera type '{cfg.type}' is not valid.")
+
     return cameras
 
 
