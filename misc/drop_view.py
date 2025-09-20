@@ -15,10 +15,13 @@ Notes:
     - The script expects the dataset to have a specific structure with 'meta/info.json', 'meta/episodes_stats.jsonl', and video directories.
     - Use '--no_copy_dataset' to avoid copying the dataset before dropping views.
 """
+
 import json
 import shutil
 from argparse import ArgumentParser
 from pathlib import Path
+
+from utils import check_camera_names
 
 
 def parse_args():
@@ -29,19 +32,6 @@ def parse_args():
         "--no_copy_dataset", action="store_true", help="whether to copy the dataset before dropping views"
     )
     return parser.parse_args()
-
-
-def check_camera_names(dataset_root: str, camera_names: list[str]):
-    """Check if the provided camera names exist in 'meta/info.json' of the dataset."""
-    dataset_root = Path(dataset_root)
-    with open(dataset_root / "meta/info.json", "r") as f:
-        info = json.load(f)
-
-    features = info["features"]
-    existing_cameras = [f.split(".")[2] for f in features if f.startswith("observation.images.")]
-    for camera_name in camera_names:
-        if camera_name not in existing_cameras:
-            raise ValueError(f"Camera '{camera_name}' not found in dataset.")
 
 
 def drop_view(dataset_root: str, camera_names: list[str]):
