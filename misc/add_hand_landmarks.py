@@ -29,17 +29,20 @@ Notes:
 
 import json
 import logging
+import os
 import shutil
 from argparse import ArgumentParser
 from pathlib import Path
 
 import cv2
-import imageio
 import numpy as np
 import pandas as pd
+from torchcodec.decoders import VideoDecoder
 from tqdm import tqdm
 
 from lerobot.cameras.wrappers.mediapipe import MediapipeHandLandmarkerCamera
+from lerobot.datasets.image_writer import AsyncImageWriter
+from lerobot.datasets.video_utils import encode_video_frames
 
 try:
     import mediapipe as mp
@@ -132,6 +135,19 @@ def parse_args():
         help="Whether to draw landmarks on the image.",
     )
 
+    parser.add_argument(
+        "--num_image_writer_processes",
+        type=int,
+        default=0,
+        help="Number of processes for AsyncImageWriter. 0 means no multiprocessing.",
+    )
+    parser.add_argument(
+        "--num_image_writer_threads",
+        type=int,
+        default=4,
+        help="Number of threads for AsyncImageWriter.",
+    )
+
     return parser.parse_args()
 
 
@@ -204,6 +220,13 @@ def process_hand_landmarks(args, camera_name: str):
     parquet_files = sorted(dataset_root.glob("data/**/*.parquet"))
     video_files = sorted(dataset_root.glob(f"videos/**/observation.images.{camera_name}/*.mp4"))
 
+    # Instantiate image writer
+    if args.draw_landmarks:
+        writer = AsyncImageWriter(
+            num_processes=args.num_image_writer_processes,
+            num_threads=args.num_image_writer_threads,
+        )
+
     for ep_i, (pf, vf) in tqdm(
         enumerate(zip(parquet_files, video_files, strict=True)), total=len(parquet_files)
     ):
@@ -224,19 +247,24 @@ def process_hand_landmarks(args, camera_name: str):
             is_detected = np.zeros((len(states), len(args.handednesses)), dtype=bool)
 
         # Load video
-        reader = imageio.get_reader(vf, format="ffmpeg")
-        fps = reader.get_meta_data()["fps"]
-        ms_per_frame = 1000.0 / fps
+        decoder = VideoDecoder(vf)
+        metadata = decoder.metadata
+        average_fps = metadata.average_fps
+        ms_per_frame = 1000.0 / average_fps
 
-        # Prepare to write annotated video
         if args.draw_landmarks:
-            out_vf = vf.with_name(vf.stem + "_annotated.mp4")
-            writer = imageio.get_writer(out_vf, fps=fps, codec="libx264")
+            # Make temporal image folder
+            img_dir = Path(str(vf).replace("videos", "images").rsplit(".", 1)[0])
+            os.makedirs(img_dir, exist_ok=True)
 
-        for frame_i, frame in enumerate(reader):
-            # Detect hand landmarks
-            ts = int(round(frame_i * ms_per_frame))
+        for frame_i in range(len(decoder)):
+            # Read frame
+            frame_batch = decoder.get_frame_at(frame_i)
+            frame = frame_batch.data.numpy().transpose(1, 2, 0)
+            ts = round(frame_i * ms_per_frame)
             mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
+
+            # Detect hand landmarks
             result = landmarker.detect_for_video(mp_image, ts)
 
             if not args.no_append_keypoints:
@@ -265,16 +293,16 @@ def process_hand_landmarks(args, camera_name: str):
             if args.draw_landmarks:
                 # Draw landmarks
                 annotated_rgb = draw_landmarks_on_image(frame, result, args.draw_handedness)
-                writer.append_data(annotated_rgb)
+                writer.save_image(annotated_rgb, img_dir / f"frame_{frame_i:06d}.png")
 
         landmarker.close()
-        reader.close()
+        writer.wait_until_done()
 
         if not args.no_append_keypoints:
             # Save updated parquet
             parquet["observation.state"] = states
             parquet.to_parquet(pf)
-            logging.info(f"[INFO] Updated '{pf.name}' with hand keypoints")
+            logging.info(f"Updated '{pf.name}' with hand keypoints")
 
             # Update episode stats
             stats = episode_stats[ep_i]["stats"]
@@ -296,16 +324,20 @@ def process_hand_landmarks(args, camera_name: str):
 
         if args.draw_landmarks:
             # Save annotated video
-            writer.close()
-            shutil.move(out_vf, vf)
-            logging.info(f"[INFO] Saved annotated video to {vf}")
+            encode_video_frames(img_dir, vf, round(average_fps), overwrite=True)
+            shutil.rmtree(img_dir)
+            logging.info(f"Saved annotated video to {vf}")
 
     # Save updated episode stats
     if not args.no_append_keypoints:
         with open(dataset_root / "meta/episodes_stats.jsonl", "w") as f:
             for stats in episode_stats:
                 f.write(json.dumps(stats) + "\n")
-        logging.info("[INFO] Updated 'meta/episodes_stats.jsonl'")
+        logging.info("Updated 'meta/episodes_stats.jsonl'")
+
+    # Remove temporal image folder
+    if args.draw_landmarks:
+        shutil.rmtree(dataset_root / "images", ignore_errors=True)
 
 
 def main(args):
@@ -318,7 +350,7 @@ def main(args):
             raise FileExistsError(f"{new_dataset_root} already exists.")
         shutil.copytree(args.dataset_root, new_dataset_root)
         args.dataset_root = new_dataset_root
-        logging.info(f"[INFO] Copied dataset to {new_dataset_root}")
+        logging.info(f"Copied dataset to {new_dataset_root}")
 
     # Download model if not exists
     model_path = MediapipeHandLandmarkerCamera.MODEL_PATH
@@ -352,11 +384,11 @@ def main(args):
 
         with open(dataset_root / "meta/info.json", "w") as f:
             json.dump(info, f, indent=4)
-        logging.info("[INFO] Updated 'meta/info.json'")
+        logging.info("Updated 'meta/info.json'")
 
     # Process hand landmarks for each camera
     for camera_name in args.camera_names:
-        logging.info(f"[INFO] Processing camera '{camera_name}'")
+        logging.info(f"Processing camera '{camera_name}'")
         process_hand_landmarks(args, camera_name)
 
 
