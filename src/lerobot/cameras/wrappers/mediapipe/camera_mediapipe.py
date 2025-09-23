@@ -41,6 +41,7 @@ class MediapipeHandLandmarkerCamera(WrapperCamera):
 
         self.keypoints = config.keypoints
         self.handednesses = config.handednesses
+        self.no_append_keypoints = config.no_append_keypoints
         self.draw_handedness = config.draw_handedness
         self.draw_landmarks = config.draw_landmarks
         self.feature_keys = list(config.features.keys())
@@ -108,7 +109,7 @@ class MediapipeHandLandmarkerCamera(WrapperCamera):
         return timestamp
 
     def _init_landmarks(self) -> dict[str, float]:
-        return dict.fromkeys(self.feature_keys, 0.0)
+        return {} if self.no_append_keypoints else dict.fromkeys(self.feature_keys, 0.0)
 
     def _landmarker_callback(self, result: HandLandmarkerResult, image: mp.Image, timestamp: int):
         self.annotated_image = self._pop_frame(timestamp)
@@ -123,11 +124,12 @@ class MediapipeHandLandmarkerCamera(WrapperCamera):
             hand_landmark = hand_landmarks_list[idx]
             handedness = handedness_list[idx]
 
-            category = handedness[0].category_name
-            for keypoint in self.keypoints:
-                ft_key = f"{category}_{keypoint}".lower()
-                self.detected_landmarks[f"{ft_key}.x"] = hand_landmark[HandLandmarks[keypoint]].x
-                self.detected_landmarks[f"{ft_key}.y"] = hand_landmark[HandLandmarks[keypoint]].y
+            if self.no_append_keypoints:
+                category = handedness[0].category_name
+                for keypoint in self.keypoints:
+                    ft_key = f"{category}_{keypoint}".lower()
+                    self.detected_landmarks[f"{ft_key}.x"] = hand_landmark[HandLandmarks[keypoint]].x
+                    self.detected_landmarks[f"{ft_key}.y"] = hand_landmark[HandLandmarks[keypoint]].y
 
             if self.draw_landmarks:
                 landmarks_proto = landmark_pb2.NormalizedLandmarkList()
