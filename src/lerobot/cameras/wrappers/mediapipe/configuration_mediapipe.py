@@ -29,11 +29,16 @@ class MediapipeHandLandmarkerCameraConfig(WrapperCameraConfig):
     keypoints: tuple[str, ...] = ("WRIST",)
     handednesses: tuple[str, ...] = ("Left", "Right")
 
+    no_append_keypoints: bool = False
     draw_handedness: bool = False
     draw_landmarks: bool = True
 
     def __post_init__(self):
         super().__post_init__()
+        if self.no_append_keypoints and (not self.draw_landmarks):
+            raise ValueError(
+                "Appending keypoints or drawing landmarks must be available"
+            )
         for keypoint in self.keypoints:
             if keypoint not in HandLandmarks.__members__:
                 raise ValueError(
