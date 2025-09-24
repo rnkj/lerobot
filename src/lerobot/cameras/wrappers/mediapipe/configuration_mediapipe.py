@@ -54,10 +54,11 @@ class MediapipeHandLandmarkerCameraConfig(WrapperCameraConfig):
     @property
     def features(self) -> dict[str, Any]:
         ft = super().features
-        for handedness in self.handednesses:
-            for keypoint in self.keypoints:
-                pair = f"{handedness}_{keypoint}".lower()
-                d = {f"{pair}.x": float, f"{pair}.y": float}
-                ft.update(d)
+        if not self.no_append_keypoints:
+            for handedness in self.handednesses:
+                for keypoint in self.keypoints:
+                    pair = f"{handedness}_{keypoint}".lower()
+                    d = {f"{pair}.x": float, f"{pair}.y": float}
+                    ft.update(d)
         return ft
 
