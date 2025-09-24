@@ -124,7 +124,7 @@ class MediapipeHandLandmarkerCamera(WrapperCamera):
             hand_landmark = hand_landmarks_list[idx]
             handedness = handedness_list[idx]
 
-            if self.no_append_keypoints:
+            if not self.no_append_keypoints:
                 category = handedness[0].category_name
                 for keypoint in self.keypoints:
                     ft_key = f"{category}_{keypoint}".lower()
