@@ -298,9 +298,11 @@ def process_hand_landmarks(args, camera_name: str):
                 writer.save_image(annotated_rgb, img_dir / f"frame_{frame_i:06d}.png")
 
         landmarker.close()
-        writer.wait_until_done()
 
         if not args.no_append_keypoints:
+            # Synchronize image writing
+            writer.wait_until_done()
+
             # Save updated parquet
             parquet["observation.state"] = states
             parquet.to_parquet(pf)
