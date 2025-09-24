@@ -243,6 +243,11 @@ def process_hand_landmarks(args, camera_name: str):
             parquet = pd.read_parquet(pf)
             states = parquet["observation.state"]
 
+            # Initialize landmarks
+            landmark_array = np.zeros(
+                len(args.handednesses) * len(args.keypoints) * 2,
+                dtype=np.float32,
+            )
             # Mask array for calculation of stats
             is_detected = np.zeros((len(states), len(args.handednesses)), dtype=bool)
 
@@ -269,10 +274,7 @@ def process_hand_landmarks(args, camera_name: str):
 
             if not args.no_append_keypoints:
                 # Append landmarks to observation.state
-                landmark_array = np.zeros(
-                    len(args.handednesses) * len(args.keypoints) * 2,
-                    dtype=np.float32,
-                )
+                landmark_array = landmark_array.copy()
 
                 for handedness, hand_landmarks in zip(result.handedness, result.hand_landmarks, strict=True):
                     category = handedness[0].category_name
