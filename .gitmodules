@@ -1,0 +1,3 @@
+[submodule "third_party/mimicplay"]
+	path = third_party/mimicplay
+	url = https://github.com/rnkj/mimicplay
