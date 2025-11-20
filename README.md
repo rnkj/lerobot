@@ -159,6 +159,21 @@ For instance, to install 🤗 LeRobot with aloha and pusht, use:
 pip install -e ".[aloha, pusht]"
 ```
 
+#### Install MimicPlay dependencies
+
+```bash
+git clone https://github.com/rnkj/lerobot
+cd lerobot
+git submodule update --init --recursive
+
+pip install -e ".[mimicplay]"
+
+pip install -e third_party/robosuite
+pip install -e third_party/bddl
+pip install -e third_party/robomimic
+pip install -e third_party/mimicplay
+```
+
 ### Installation from PyPI
 
 **Core Library:**
