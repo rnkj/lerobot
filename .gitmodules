@@ -1,3 +1,6 @@
 [submodule "third_party/mimicplay"]
 	path = third_party/mimicplay
 	url = https://github.com/rnkj/mimicplay
+[submodule "third_party/robosuite"]
+	path = third_party/robosuite
+	url = https://github.com/ARISE-Initiative/robosuite.git
