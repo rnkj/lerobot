@@ -29,6 +29,7 @@ from lerobot.policies.diffusion.configuration_diffusion import DiffusionConfig
 from lerobot.policies.myact.configuration_act import ACTConfig as MyACTConfig
 from lerobot.policies.dinoact.configuration_act import ACTConfig as DinoACTConfig
 from lerobot.policies.siglipact.configuration_act import ACTConfig as SiglipACTConfig
+from lerobot.policies.mpact.configuration_mpact import MimicPlayACTConfig
 from lerobot.policies.pi0.configuration_pi0 import PI0Config
 from lerobot.policies.pi0fast.configuration_pi0fast import PI0FASTConfig
 from lerobot.policies.pretrained import PreTrainedPolicy
@@ -65,6 +66,10 @@ def get_policy_class(name: str) -> PreTrainedPolicy:
         from lerobot.policies.siglipact.modeling_act import ACTPolicy as SiglipACTPolicy
 
         return SiglipACTPolicy
+    elif name == "mpact":
+        from lerobot.policies.mpact.modeling_mpact import MimicPlayACTPolicy
+
+        return MimicPlayACTPolicy
     elif name == "vqbet":
         from lerobot.policies.vqbet.modeling_vqbet import VQBeTPolicy
 
@@ -106,6 +111,8 @@ def make_policy_config(policy_type: str, **kwargs) -> PreTrainedConfig:
         return DinoACTConfig(**kwargs)
     elif policy_type == "siglipact":
         return SiglipACTConfig(**kwargs)
+    elif policy_type == "mpact":
+        return MimicPlayACTConfig(**kwargs)
     elif policy_type == "vqbet":
         return VQBeTConfig(**kwargs)
     elif policy_type == "pi0":
