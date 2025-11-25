@@ -3,6 +3,7 @@ import json
 import shutil
 from pathlib import Path
 
+import numpy as np
 import h5py
 import pandas as pd
 
@@ -51,13 +52,8 @@ def update_info_json(info_path, camera_view1, camera_view2, total_frames):
     ]
 
     state_ft = info["features"]["observation.state"]
-    state_ft["shape"] = [4]
-    state_ft["names"] = [
-        f"{camera_view1}.x",
-        f"{camera_view1}.y",
-        f"{camera_view2}.x",
-        f"{camera_view2}.y",
-    ]
+    state_ft["shape"] = [0]
+    state_ft["names"] = []
 
     # Remove image observation features for cameras not matching the two selected views
     keys_to_remove = []
@@ -91,9 +87,7 @@ def main():
         raise FileExistsError(
             f"Destination dataset directory {destination_dataset_dir} already exists."
         )
-    print(f"[DEBUG] Creating destination dataset directory at {destination_dataset_dir}")
     destination_dataset_dir.mkdir(parents=True, exist_ok=False)
-    # raise AssertionError("Scheduled termination for debug")
 
     # Load hdf5 and update parquet files
     with h5py.File(human_play_hdf5_file, "r") as hdf5:
@@ -107,38 +101,12 @@ def main():
         stats_list = []
         episode_count = 0
 
-        # Parquet tree
-        """
-        <source_dataset_dir>
-            └──data
-                ├── chunk-000
-                │   ├── episode_000000.parquet
-                │   ├── episode_000001.parquet
-                │   ├── episode_000002.parquet
-                │   └── ...
-                ├── chunk-001
-                │   ├── episode_000000.parquet
-                │   ├── episode_000001.parquet
-                │   ├── episode_000002.parquet
-                │   └── ...
-                └── ...
-        """
-        """
-        Structure of parquet
-        ```python
-        import pandas as pd
-
-        df = pd.read_parquet("path/to/episode_000000.parquet")
-        print(df.keys())
-        # Index(['action', 'observation.state', 'timestamp', 'frame_index',
-        #    'episode_index', 'index', 'task_index'],
-        #   dtype='object')
-        ```
-
-        """
         (destination_dataset_dir / "data").mkdir(parents=True, exist_ok=False)
         source_data_dir = source_dataset_dir / "data"
         for src_chunk_dir in sorted(source_data_dir.iterdir()):
+            if not src_chunk_dir.is_dir():
+                continue
+
             dst_chunk_dir = destination_dataset_dir / "data" / src_chunk_dir.name
             dst_chunk_dir.mkdir(parents=True, exist_ok=False)
 
@@ -150,8 +118,9 @@ def main():
 
                 # Update action and observation.state columns
                 hand_loc = hdf5[f"data/demo_{demo_i}/hand_loc"][:].squeeze()
+                state = np.empty((len(hand_loc), 0), dtype=np.float32)
                 df["action"] = hand_loc.tolist()
-                df["observation.state"] = hand_loc.tolist()
+                df["observation.state"] = state.tolist()
 
                 # Save updated parquet
                 destination_parquet_file = dst_chunk_dir / parquet_file.name
@@ -166,42 +135,17 @@ def main():
                         "count": [hand_loc.shape[0]],
                     },
                     "observation.state": {
-                        "mean": hand_loc.mean(axis=0).tolist(),
-                        "std": hand_loc.std(axis=0).tolist(),
-                        "min": hand_loc.min(axis=0).tolist(),
-                        "max": hand_loc.max(axis=0).tolist(),
-                        "count": [hand_loc.shape[0]],
+                        "mean": state.mean(axis=0).tolist(),
+                        "std": state.std(axis=0).tolist(),
+                        "min": state.min(axis=0).tolist(),
+                        "max": state.max(axis=0).tolist(),
+                        "count": [state.shape[0]],
                     },
-                    # f"observation.images.{camera_view1}": [],
-                    # f"observation.images.{camera_view2}": [],
-                    # "timestamp": [],
-                    # "frame_index": [],
-                    # "episode_index": [],
-                    # "index": [],
-                    # "task_index": [],
                 }
                 stats_list.append(stats_dict)
 
                 episode_count += 1
 
-    # Video tree
-    """
-    <source_dataset_dir>
-      |- videos
-        |- chunk_000
-        | |- observation.images.<camera_view1>
-        | | |- *.mp4
-        | |- observation.images.<camera_view2>
-        | | |- *.mp4
-        | |- <other_camera_views>
-        |- chunk_001 
-        | |- observation.images.<camera_view1>
-        | | |- *.mp4
-        | |- observation.images.<camera_view2>
-        | | |- *.mp4
-        | |- <other_camera_views>
-        |- ...
-    """
     # Copy all videos which matches the two selected camera views
     source_videos_dir = source_dataset_dir / "videos"
     destination_videos_dir = destination_dataset_dir / "videos"
