@@ -34,7 +34,7 @@ from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
 from torch import Tensor, nn
 
 from lerobot.constants import ACTION, OBS_ENV_STATE, OBS_IMAGES, OBS_STATE
-from lerobot.policies.diffusion.configuration_diffusion import DiffusionConfig
+from lerobot.policies.mimicplay.configuration_mimicplay import HumanPlayConfig
 from lerobot.policies.normalize import Normalize, Unnormalize
 from lerobot.policies.pretrained import PreTrainedPolicy
 from lerobot.policies.utils import (
@@ -51,12 +51,12 @@ class HumanPlayPolicy(PreTrainedPolicy):
     (paper: https://huggingface.co/papers/2303.04137, code: https://github.com/real-stanford/diffusion_policy).
     """
 
-    config_class = DiffusionConfig
+    config_class = HumanPlayConfig
     name = "humanplay"
 
     def __init__(
         self,
-        config: DiffusionConfig,
+        config: HumanPlayConfig,
         dataset_stats: dict[str, dict[str, Tensor]] | None = None,
     ):
         """
@@ -177,12 +177,13 @@ def _make_noise_scheduler(name: str, **kwargs: dict) -> DDPMScheduler | DDIMSche
 
 
 class DiffusionModel(nn.Module):
-    def __init__(self, config: DiffusionConfig):
+    def __init__(self, config: HumanPlayConfig):
         super().__init__()
         self.config = config
 
         # Build observation encoders (depending on which observations are provided).
-        global_cond_dim = self.config.robot_state_feature.shape[0]
+        # global_cond_dim = self.config.robot_state_feature.shape[0]
+        global_cond_dim = 0
         if self.config.image_features:
             num_images = len(self.config.image_features)
             if self.config.use_separate_rgb_encoder_per_camera:
@@ -245,7 +246,8 @@ class DiffusionModel(nn.Module):
     def _prepare_global_conditioning(self, batch: dict[str, Tensor]) -> Tensor:
         """Encode image features and concatenate them all together along with the state vector."""
         batch_size, n_obs_steps = batch[OBS_STATE].shape[:2]
-        global_cond_feats = [batch[OBS_STATE]]
+        global_cond_feats = []
+        # global_cond_feats = [batch[OBS_STATE]]
         # Extract image features.
         if self.config.image_features:
             if self.config.use_separate_rgb_encoder_per_camera:
@@ -450,7 +452,7 @@ class DiffusionRgbEncoder(nn.Module):
     Includes the ability to normalize and crop the image first.
     """
 
-    def __init__(self, config: DiffusionConfig):
+    def __init__(self, config: HumanPlayConfig):
         super().__init__()
         # Set up optional preprocessing.
         if config.crop_shape is not None:
@@ -592,7 +594,7 @@ class DiffusionConditionalUnet1d(nn.Module):
     Note: this removes local conditioning as compared to the original diffusion policy code.
     """
 
-    def __init__(self, config: DiffusionConfig, global_cond_dim: int):
+    def __init__(self, config: HumanPlayConfig, global_cond_dim: int):
         super().__init__()
 
         self.config = config

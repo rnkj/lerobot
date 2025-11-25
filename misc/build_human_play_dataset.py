@@ -1,8 +1,10 @@
 import argparse
 import json
+import shutil
 from pathlib import Path
 
 import h5py
+import pandas as pd
 
 
 def parse_arguments():
@@ -11,9 +13,17 @@ def parse_arguments():
     )
     parser.add_argument(
         "--source_dataset",
+        "--src",
         type=str,
         required=True,
         help="Path to the LeRobot dataset which includes the human play videos",
+    )
+    parser.add_argument(
+        "--destination_dataset",
+        "--dst",
+        type=str,
+        default=None,
+        help="Path to the output LeRobot dataset which includes human hand locations as the actions"
     )
     parser.add_argument(
         "--human_play_hdf5",
@@ -23,11 +33,12 @@ def parse_arguments():
     )
     return parser.parse_args()
 
-def update_info_json(info_path, camera_view1, camera_view2):
+def update_info_json(info_path, camera_view1, camera_view2, total_frames):
     """Update info.json based on the selected two camera views."""
     with open(info_path, "r") as f:
         info = json.load(f)
 
+    info["total_frames"] = total_frames
     info["total_videos"] = 2 * info["total_episodes"]
 
     action_ft = info["features"]["action"]
@@ -39,7 +50,7 @@ def update_info_json(info_path, camera_view1, camera_view2):
         f"{camera_view2}.y",
     ]
 
-    state_ft = info["features"]["observation.action"]
+    state_ft = info["features"]["observation.state"]
     state_ft["shape"] = [4]
     state_ft["names"] = [
         f"{camera_view1}.x",
@@ -69,19 +80,177 @@ def main():
     source_dataset_dir = Path(args.source_dataset)
     human_play_hdf5_file = Path(args.human_play_hdf5)
 
-    # load hdf5
-    hdf5 = h5py.File(human_play_hdf5_file, "r")
-    camera_view1 = hdf5.attrs["camera_view1"]
-    camera_view2 = hdf5.attrs["camera_view2"]
+    if args.destination_dataset is None:
+        # append "_human_play" to the source dataset directory name
+        destination_dataset_dir = Path(str(source_dataset_dir) + "_human_play")
+    else:
+        destination_dataset_dir = Path(args.destination_dataset)
+
+    # Create destination dataset directory
+    if destination_dataset_dir.exists():
+        raise FileExistsError(
+            f"Destination dataset directory {destination_dataset_dir} already exists."
+        )
+    print(f"[DEBUG] Creating destination dataset directory at {destination_dataset_dir}")
+    destination_dataset_dir.mkdir(parents=True, exist_ok=False)
+    # raise AssertionError("Scheduled termination for debug")
+
+    # Load hdf5 and update parquet files
+    with h5py.File(human_play_hdf5_file, "r") as hdf5:
+        # get attributes
+        camera_view1 = hdf5.attrs["camera_view1"]
+        camera_view2 = hdf5.attrs["camera_view2"]
+        # height = hdf5.attrs["camera_height"]
+        # width = hdf5.attrs["camera_width"]
+
+        # statistics
+        stats_list = []
+        episode_count = 0
+
+        # Parquet tree
+        """
+        <source_dataset_dir>
+            └──data
+                ├── chunk-000
+                │   ├── episode_000000.parquet
+                │   ├── episode_000001.parquet
+                │   ├── episode_000002.parquet
+                │   └── ...
+                ├── chunk-001
+                │   ├── episode_000000.parquet
+                │   ├── episode_000001.parquet
+                │   ├── episode_000002.parquet
+                │   └── ...
+                └── ...
+        """
+        """
+        Structure of parquet
+        ```python
+        import pandas as pd
+
+        df = pd.read_parquet("path/to/episode_000000.parquet")
+        print(df.keys())
+        # Index(['action', 'observation.state', 'timestamp', 'frame_index',
+        #    'episode_index', 'index', 'task_index'],
+        #   dtype='object')
+        ```
+
+        """
+        (destination_dataset_dir / "data").mkdir(parents=True, exist_ok=False)
+        source_data_dir = source_dataset_dir / "data"
+        for src_chunk_dir in sorted(source_data_dir.iterdir()):
+            dst_chunk_dir = destination_dataset_dir / "data" / src_chunk_dir.name
+            dst_chunk_dir.mkdir(parents=True, exist_ok=False)
+
+            for demo_i, parquet_file in enumerate(sorted(src_chunk_dir.iterdir())):
+                df = pd.read_parquet(parquet_file)
+
+                # Drop the last row of all DataFrame keys
+                df = df.iloc[:-1]
+
+                # Update action and observation.state columns
+                hand_loc = hdf5[f"data/demo_{demo_i}/hand_loc"][:].squeeze()
+                df["action"] = hand_loc.tolist()
+                df["observation.state"] = hand_loc.tolist()
+
+                # Save updated parquet
+                destination_parquet_file = dst_chunk_dir / parquet_file.name
+                df.to_parquet(destination_parquet_file)
+
+                stats_dict = {
+                    "action": {
+                        "mean": hand_loc.mean(axis=0).tolist(),
+                        "std": hand_loc.std(axis=0).tolist(),
+                        "min": hand_loc.min(axis=0).tolist(),
+                        "max": hand_loc.max(axis=0).tolist(),
+                        "count": [hand_loc.shape[0]],
+                    },
+                    "observation.state": {
+                        "mean": hand_loc.mean(axis=0).tolist(),
+                        "std": hand_loc.std(axis=0).tolist(),
+                        "min": hand_loc.min(axis=0).tolist(),
+                        "max": hand_loc.max(axis=0).tolist(),
+                        "count": [hand_loc.shape[0]],
+                    },
+                    # f"observation.images.{camera_view1}": [],
+                    # f"observation.images.{camera_view2}": [],
+                    # "timestamp": [],
+                    # "frame_index": [],
+                    # "episode_index": [],
+                    # "index": [],
+                    # "task_index": [],
+                }
+                stats_list.append(stats_dict)
+
+                episode_count += 1
+
+    # Video tree
+    """
+    <source_dataset_dir>
+      |- videos
+        |- chunk_000
+        | |- observation.images.<camera_view1>
+        | | |- *.mp4
+        | |- observation.images.<camera_view2>
+        | | |- *.mp4
+        | |- <other_camera_views>
+        |- chunk_001 
+        | |- observation.images.<camera_view1>
+        | | |- *.mp4
+        | |- observation.images.<camera_view2>
+        | | |- *.mp4
+        | |- <other_camera_views>
+        |- ...
+    """
+    # Copy all videos which matches the two selected camera views
+    source_videos_dir = source_dataset_dir / "videos"
+    destination_videos_dir = destination_dataset_dir / "videos"
+
+    # Load hdf5 to get camera view names first
+    with h5py.File(human_play_hdf5_file, "r") as temp_hdf5:
+        camera_view1 = temp_hdf5.attrs["camera_view1"]
+        camera_view2 = temp_hdf5.attrs["camera_view2"]
+
+    # Iterate through chunk directories
+    for chunk_dir in sorted(source_videos_dir.iterdir()):
+        if not chunk_dir.is_dir():
+            continue
+
+        # Copy only the two selected camera view directories
+        for camera_view in [camera_view1, camera_view2]:
+            camera_view_key = f"observation.images.{camera_view}"
+            source_camera_dir = chunk_dir / camera_view_key
+
+            if source_camera_dir.exists():
+                destination_camera_dir = destination_videos_dir / chunk_dir.name / camera_view_key
+                shutil.copytree(source_camera_dir, destination_camera_dir)
+
+    # Copy meta tree
+    shutil.copytree(source_dataset_dir / "meta", destination_dataset_dir / "meta")
+
+    # update episodes.jsonl
+    src_episodes_path = source_dataset_dir / "meta/episodes.jsonl"
+    dst_episodes_path = destination_dataset_dir / "meta/episodes.jsonl"
+    total_frames = 0
+    with open(src_episodes_path, "r") as fr, open(dst_episodes_path, "w") as fw:
+        for line in fr.readlines():
+            ep_dict = json.loads(line)
+            ep_dict["length"] -= 1  # drop the last frame
+            fw.write(json.dumps(ep_dict) + "\n")
+            total_frames += ep_dict["length"]
 
     # update info.json
-    info_path = source_dataset_dir / "meta/info.json"
-    update_info_json(info_path, camera_view1, camera_view2)
+    info_path = destination_dataset_dir / "meta/info.json"
+    update_info_json(info_path, camera_view1, camera_view2, total_frames)
 
     # update episode_stats.jsonl
-    episode_stats_path = source_dataset_dir / "meta/episode_stats.jsonl"
-    with open(episode_stats_path, "r") as f:
-        episode_stats = [json.loads(line) for line in f.readlines()]
-        for episode_stat in episode_stats:
+    src_episodes_stats_path = source_dataset_dir / "meta/episodes_stats.jsonl"
+    dst_episodes_stats_path = destination_dataset_dir / "meta/episodes_stats.jsonl"
+    with open(src_episodes_stats_path, "r") as fr, open(dst_episodes_stats_path, "w") as fw:
+        for stats_i, line in enumerate(fr.readlines()):
+            stats_dict = json.loads(line)
+            stats_dict["stats"].update(stats_list[stats_i])
+            fw.write(json.dumps(stats_dict) + "\n")
 
 if __name__ == "__main__":
+    main()

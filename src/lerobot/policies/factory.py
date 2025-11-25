@@ -38,7 +38,7 @@ from lerobot.policies.sac.reward_model.configuration_classifier import RewardCla
 from lerobot.policies.smolvla.configuration_smolvla import SmolVLAConfig
 from lerobot.policies.tdmpc.configuration_tdmpc import TDMPCConfig
 from lerobot.policies.vqbet.configuration_vqbet import VQBeTConfig
-
+from lerobot.policies.mimicplay.configuration_mimicplay import HumanPlayConfig
 
 def get_policy_class(name: str) -> PreTrainedPolicy:
     """Get the policy's class and config class given a name (matching the policy class' `name` attribute)."""
@@ -94,6 +94,10 @@ def get_policy_class(name: str) -> PreTrainedPolicy:
         from lerobot.policies.smolvla.modeling_smolvla import SmolVLAPolicy
 
         return SmolVLAPolicy
+    elif name == "humanplay":
+        from lerobot.policies.mimicplay.modeling_humanplay import HumanPlayPolicy
+
+        return HumanPlayPolicy
     else:
         raise NotImplementedError(f"Policy with name {name} is not implemented.")
 
@@ -125,6 +129,8 @@ def make_policy_config(policy_type: str, **kwargs) -> PreTrainedConfig:
         return SmolVLAConfig(**kwargs)
     elif policy_type == "reward_classifier":
         return RewardClassifierConfig(**kwargs)
+    elif policy_type == "humanplay":
+        return HumanPlayConfig(**kwargs)
     else:
         raise ValueError(f"Policy type '{policy_type}' is not available.")
 
