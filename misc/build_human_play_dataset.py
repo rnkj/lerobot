@@ -3,8 +3,8 @@ import json
 import shutil
 from pathlib import Path
 
-import numpy as np
 import h5py
+import numpy as np
 import pandas as pd
 
 
@@ -40,7 +40,7 @@ def update_info_json(info_path, camera_view1, camera_view2, total_frames):
         info = json.load(f)
 
     info["total_frames"] = total_frames
-    info["total_videos"] = 2 * info["total_episodes"]
+    info["total_videos"] = info["total_episodes"]
 
     action_ft = info["features"]["action"]
     action_ft["shape"] = [4]
@@ -60,7 +60,7 @@ def update_info_json(info_path, camera_view1, camera_view2, total_frames):
     for key in info["features"].keys():
         if key.startswith("observation.images."):
             camera_name = key.replace("observation.images.", "")
-            if camera_name != camera_view1 and camera_name != camera_view2:
+            if camera_name != camera_view1:
                 keys_to_remove.append(key)
 
     for key in keys_to_remove:
@@ -150,18 +150,14 @@ def main():
     source_videos_dir = source_dataset_dir / "videos"
     destination_videos_dir = destination_dataset_dir / "videos"
 
-    # Load hdf5 to get camera view names first
-    with h5py.File(human_play_hdf5_file, "r") as temp_hdf5:
-        camera_view1 = temp_hdf5.attrs["camera_view1"]
-        camera_view2 = temp_hdf5.attrs["camera_view2"]
-
     # Iterate through chunk directories
     for chunk_dir in sorted(source_videos_dir.iterdir()):
         if not chunk_dir.is_dir():
             continue
 
         # Copy only the two selected camera view directories
-        for camera_view in [camera_view1, camera_view2]:
+        # for camera_view in [camera_view1, camera_view2]:
+        for camera_view in [camera_view1]:
             camera_view_key = f"observation.images.{camera_view}"
             source_camera_dir = chunk_dir / camera_view_key
 
