@@ -34,9 +34,10 @@ from lerobot.policies.diffusion.modeling_diffusion import (
     DiffusionConditionalUnet1d,
     DiffusionRgbEncoder,
 )
-from lerobot.policies.mimicplay.configuration_mimicplay import HumanPlayConfig
+from lerobot.policies.mimicplay.configuration_mimicplay import MimicPlayDiffusionConfig
+from lerobot.policies.mimicplay.modeling_humanplay import HumanPlayPolicy
 from lerobot.policies.normalize import Normalize, Unnormalize
-from lerobot.policies.pretrained import PreTrainedPolicy
+from lerobot.policies.pretrained import PreTrainedConfig, PreTrainedPolicy
 from lerobot.policies.utils import (
     get_device_from_parameters,
     get_dtype_from_parameters,
@@ -44,18 +45,18 @@ from lerobot.policies.utils import (
 )
 
 
-class HumanPlayPolicy(PreTrainedPolicy):
+class MimicPlayDiffusionPolicy(PreTrainedPolicy):
     """
     Diffusion Policy as per "Diffusion Policy: Visuomotor Policy Learning via Action Diffusion"
     (paper: https://huggingface.co/papers/2303.04137, code: https://github.com/real-stanford/diffusion_policy).
     """
 
-    config_class = HumanPlayConfig
-    name = "humanplay"
+    config_class = MimicPlayDiffusionConfig
+    name = "mimicplay-diffusion"
 
     def __init__(
         self,
-        config: HumanPlayConfig,
+        config: MimicPlayDiffusionConfig,
         dataset_stats: dict[str, dict[str, Tensor]] | None = None,
     ):
         """
@@ -176,22 +177,33 @@ def _make_noise_scheduler(name: str, **kwargs: dict) -> DDPMScheduler | DDIMSche
 
 
 class DiffusionModel(nn.Module):
-    def __init__(self, config: HumanPlayConfig):
+    def __init__(self, config: MimicPlayDiffusionConfig):
         super().__init__()
         self.config = config
 
         # Build observation encoders (depending on which observations are provided).
         global_cond_dim = self.config.robot_state_feature.shape[0]
-        #global_cond_dim = 0
         if self.config.image_features:
-            num_images = len(self.config.image_features)
-            if self.config.use_separate_rgb_encoder_per_camera:
-                encoders = [DiffusionRgbEncoder(config) for _ in range(num_images)]
-                self.rgb_encoder = nn.ModuleList(encoders)
-                global_cond_dim += encoders[0].feature_dim * num_images
-            else:
-                self.rgb_encoder = DiffusionRgbEncoder(config)
-                global_cond_dim += self.rgb_encoder.feature_dim * num_images
+            encoders = []
+            for key in self.config.image_features.keys():
+                load_latent_planner = (
+                    self.config.latent_planner_path is not None
+                    and key == self.config.image_for_latent_planner
+                )
+                if load_latent_planner:
+                    human_play_config = PreTrainedConfig.from_pretrained(
+                        self.config.latent_planner_path
+                    )
+                    human_play_config.device = "cpu"
+                    human_play_policy = HumanPlayPolicy.from_pretrained(
+                        self.config.latent_planner_path,
+                        config=human_play_config,
+                    )
+                    encoders.append(human_play_policy.diffusion.rgb_encoder)
+                else:
+                    encoders.append(DiffusionRgbEncoder(config))
+                global_cond_dim += encoders[-1].feature_dim
+            self.rgb_encoder = nn.ModuleList(encoders)
         if self.config.env_state_feature:
             global_cond_dim += self.config.env_state_feature.shape[0]
 
@@ -248,30 +260,33 @@ class DiffusionModel(nn.Module):
         global_cond_feats = [batch[OBS_STATE]]
         # Extract image features.
         if self.config.image_features:
-            if self.config.use_separate_rgb_encoder_per_camera:
-                # Combine batch and sequence dims while rearranging to make the camera index dimension first.
-                images_per_camera = einops.rearrange(batch["observation.images"], "b s n ... -> n (b s) ...")
-                img_features_list = torch.cat(
-                    [
-                        encoder(images)
-                        for encoder, images in zip(self.rgb_encoder, images_per_camera, strict=True)
-                    ]
+            # Combine batch and sequence dims while rearranging to make the camera index dimension first.
+            images_per_camera = einops.rearrange(batch["observation.images"], "b s n ... -> n (b s) ...")
+            img_features_list = []
+            for key, encoder, images in zip(
+                self.config.image_features.keys(),
+                self.rgb_encoder,
+                images_per_camera,
+                strict=True,
+            ):
+                use_latent_planner = (
+                    self.config.latent_planner_path is not None
+                    and key == self.config.image_for_latent_planner
                 )
-                # Separate batch and sequence dims back out. The camera index dim gets absorbed into the
-                # feature dim (effectively concatenating the camera features).
-                img_features = einops.rearrange(
-                    img_features_list, "(n b s) ... -> b s (n ...)", b=batch_size, s=n_obs_steps
-                )
-            else:
-                # Combine batch, sequence, and "which camera" dims before passing to shared encoder.
-                img_features = self.rgb_encoder(
-                    einops.rearrange(batch["observation.images"], "b s n ... -> (b s n) ...")
-                )
-                # Separate batch dim and sequence dim back out. The camera index dim gets absorbed into the
-                # feature dim (effectively concatenating the camera features).
-                img_features = einops.rearrange(
-                    img_features, "(b s n) ... -> b s (n ...)", b=batch_size, s=n_obs_steps
-                )
+                if use_latent_planner:
+                    with torch.no_grad():
+                        img_features = encoder(images).detach()
+                else:
+                    img_features = encoder(images)
+                img_features_list.append(img_features)
+            # Separate batch and sequence dims back out. The camera index dim gets absorbed into the
+            # feature dim (effectively concatenating the camera features).
+            img_features = einops.rearrange(
+                torch.cat(img_features_list),
+                "(n b s) ... -> b s (n ...)",
+                b=batch_size,
+                s=n_obs_steps,
+            )
             global_cond_feats.append(img_features)
 
         if self.config.env_state_feature:
@@ -371,3 +386,4 @@ class DiffusionModel(nn.Module):
             loss = loss * in_episode_bound.unsqueeze(-1)
 
         return loss.mean()
+
