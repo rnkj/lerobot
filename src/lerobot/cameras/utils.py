@@ -43,19 +43,16 @@ def make_cameras_from_configs(camera_configs: dict[str, CameraConfig]) -> dict[s
 
             cameras[key] = Reachy2Camera(cfg)
 
-        else:
-            try:
-                cameras[key] = cast(Camera, make_device_from_device_class(cfg))
-            except Exception as e:
-                raise ValueError(f"Error creating camera {key} with config {cfg}: {e}") from e
-
         elif cfg.type == "mediapipe_hand":
             from .wrappers.mediapipe.camera_mediapipe import MediapipeHandLandmarkerCamera
 
             cameras[key] = MediapipeHandLandmarkerCamera(cfg)
 
         else:
-            raise ValueError(f"The camera type '{cfg.type}' is not valid.")
+            try:
+                cameras[key] = cast(Camera, make_device_from_device_class(cfg))
+            except Exception as e:
+                raise ValueError(f"Error creating camera {key} with config {cfg}: {e}") from e
 
     return cameras
 
