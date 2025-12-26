@@ -70,7 +70,11 @@ from lerobot.cameras import (  # noqa: F401
 )
 from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig  # noqa: F401
 from lerobot.cameras.realsense.configuration_realsense import RealSenseCameraConfig  # noqa: F401
-from lerobot.cameras.wrappers.mediapipe.configuration_mediapipe import MediapipeHandLandmarkerCameraConfig  # noqa: F401
+# [NOTE] temporary deactivated
+# try:
+#     from lerobot.cameras.wrappers.mediapipe.configuration_mediapipe import MediapipeHandLandmarkerCameraConfig  # noqa: F401
+# except:
+#     print("[WARNING] Could not import Mediapipe")
 from lerobot.configs import parser
 from lerobot.configs.policies import PreTrainedConfig
 from lerobot.datasets.image_writer import safe_stop_image_writer

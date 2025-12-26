@@ -19,7 +19,7 @@ except Exception as e:
     logging.info(f"Could not import mediapipe: {e}")
 
 from lerobot.cameras import ColorMode
-from lerobot.constants import HF_LEROBOT_HOME
+from lerobot.utils.constants import HF_LEROBOT_HOME
 
 from ..wrapper import WrapperCamera
 from .configuration_mediapipe import MediapipeHandLandmarkerCameraConfig
