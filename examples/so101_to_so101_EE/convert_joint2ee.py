@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 from lerobot.datasets.compute_stats import aggregate_feature_stats, get_feature_stats
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
+from lerobot.datasets.utils import write_info, write_stats
 from lerobot.model.kinematics import RobotKinematics
 from lerobot.processor import RobotAction, RobotObservation, RobotProcessorPipeline
 from lerobot.processor.converters import (
@@ -29,7 +30,7 @@ from lerobot.teleoperators.so101_leader.so101_leader import SO101Leader
 
 SO_ARM100_ROOT = "./sandbox/SO-ARM100"
 HF_REPO_ID = "hf_username/repo_id"
-DATASET_ROOT = "dataset/HRC/sort_block/robot/large_block_robot_1212_260ep"
+DATASET_ROOT = "dataset/large_block_robot_1212_260ep"
 
 def main():
     # Load existing dataset
@@ -159,8 +160,9 @@ def main():
         "shape": [7],
     }
 
-    with open(info_path, "w") as f:
-        json.dump(info, f, indent=4)
+    #with open(info_path, "w") as f:
+    #    json.dump(info, f, indent=4)
+    write_info(info, new_root)
 
     # Convert action from leader joints to EE 
     data_paths = sorted(new_root.glob("data/**/file-*.parquet"))
@@ -234,12 +236,16 @@ def main():
             key: value.tolist() for key, value in aggregated_ee_action_stats.items()
         }
 
-        with open(new_root / "meta/stats.json", "w") as f:
-            json.dump(stats, f, indent=4)
+        #with open(new_root / "meta/stats.json", "w") as f:
+        #    json.dump(stats, f, indent=4)
+        write_stats(stats, new_root)
 
         # Save converted EE actions
-        data["action"] = np.concatenate(ee_actions_all, axis=0)
-        data["observation.state"] = np.concatenate(ee_states_all, axis=0)
+        from IPython import embed
+        arr = np.concatenate(ee_actions_all, axis=0).tolist()
+        embed()
+        data["action"] = np.concatenate(ee_actions_all, axis=0).tolist()
+        data["observation.state"] = np.concatenate(ee_states_all, axis=0).tolist()
         data.to_parquet(data_path)
 
         # Save updated episode metadata
