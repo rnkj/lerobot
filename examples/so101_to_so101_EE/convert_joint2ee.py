@@ -30,7 +30,7 @@ from lerobot.teleoperators.so101_leader.so101_leader import SO101Leader
 
 SO_ARM100_ROOT = "./sandbox/SO-ARM100"
 HF_REPO_ID = "hf_username/repo_id"
-DATASET_ROOT = "dataset/large_block_robot_1212_260ep"
+DATASET_ROOT = "dataset/v30/large_block_robot_1212_130ep"
 
 def main():
     # Load existing dataset
@@ -241,9 +241,6 @@ def main():
         write_stats(stats, new_root)
 
         # Save converted EE actions
-        from IPython import embed
-        arr = np.concatenate(ee_actions_all, axis=0).tolist()
-        embed()
         data["action"] = np.concatenate(ee_actions_all, axis=0).tolist()
         data["observation.state"] = np.concatenate(ee_states_all, axis=0).tolist()
         data.to_parquet(data_path)
