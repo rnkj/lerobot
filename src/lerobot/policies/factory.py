@@ -43,6 +43,8 @@ from lerobot.policies.smolvla.configuration_smolvla import SmolVLAConfig
 from lerobot.policies.tdmpc.configuration_tdmpc import TDMPCConfig
 from lerobot.policies.utils import validate_visual_features_consistency
 from lerobot.policies.vqbet.configuration_vqbet import VQBeTConfig
+from lerobot.policies.mimicplay.configuration_mimicplay import HumanPlayConfig
+from lerobot.policies.mimicplay.configuration_mimicplay import MimicPlayDiffusionConfig
 from lerobot.processor import PolicyAction, PolicyProcessorPipeline
 from lerobot.processor.converters import (
     batch_to_transition,
@@ -122,6 +124,14 @@ def get_policy_class(name: str) -> type[PreTrainedPolicy]:
         from lerobot.policies.groot.modeling_groot import GrootPolicy
 
         return GrootPolicy
+    elif name == "humanplay":
+        from lerobot.policies.mimicplay.modeling_humanplay import HumanPlayPolicy
+
+        return HumanPlayPolicy
+    elif name == "mimicplay-diffusion":
+        from lerobot.policies.mimicplay.modeling_mimicplaydp import MimicPlayDiffusionPolicy
+
+        return MimicPlayDiffusionPolicy
     else:
         raise NotImplementedError(f"Policy with name {name} is not implemented.")
 
@@ -171,6 +181,10 @@ def make_policy_config(policy_type: str, **kwargs) -> PreTrainedConfig:
         return RewardClassifierConfig(**kwargs)
     elif policy_type == "groot":
         return GrootConfig(**kwargs)
+    elif policy_type == "humanplay":
+        return HumanPlayConfig(**kwargs)
+    elif policy_type == "mimicplay-diffusion":
+        return MimicPlayDiffusionConfig(**kwargs)
     else:
         raise ValueError(f"Policy type '{policy_type}' is not available.")
 

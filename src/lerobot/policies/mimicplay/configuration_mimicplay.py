@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from lerobot.configs.policies import PreTrainedConfig
 from lerobot.policies import DiffusionConfig
 
-from IPython import embed
+
 @PreTrainedConfig.register_subclass("humanplay")
 @dataclass
 class HumanPlayConfig(DiffusionConfig):

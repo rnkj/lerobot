@@ -24,6 +24,8 @@ from .smolvla.configuration_smolvla import SmolVLAConfig as SmolVLAConfig
 from .smolvla.processor_smolvla import SmolVLANewLineProcessor
 from .tdmpc.configuration_tdmpc import TDMPCConfig as TDMPCConfig
 from .vqbet.configuration_vqbet import VQBeTConfig as VQBeTConfig
+from .mimicplay.configuration_mimicplay import HumanPlayConfig as HumanPlayConfig
+from .mimicplay.configuration_mimicplay import MimicPlayDiffusionConfig as MimicPlayDiffusionConfig
 
 __all__ = [
     "ACTConfig",
@@ -34,4 +36,6 @@ __all__ = [
     "TDMPCConfig",
     "VQBeTConfig",
     "GrootConfig",
+    "HumanPlayConfig",
+    "MimicPlayDiffusionConfig",
 ]
